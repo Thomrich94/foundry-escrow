@@ -10,6 +10,6 @@ interface IEscrow {
   function createEscrow(address payee, bytes32 hashlock, uint64 timelock) external payable returns(uint256 id);
   function release(uint256 id, bytes calldata preimage) external;
   function refund(uint256 id) external;
-  function resolve(uint256 id, bool yoPayee) external;
+  function resolve(uint256 id, bool toPayee) external;
   function getEscrow(uint256 id) external view /* returns (struct fields ) */;
 }
