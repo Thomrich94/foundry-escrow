@@ -36,20 +36,23 @@ contract Escrow is IEscrow {
 
         id = nextEscrowId;
         escrows[id] = EscrowDetails({
-          payer: msg.sender,
-          payee: payee,
-          value: msg.value,
-          hashlock: hashlock,
-          timelock: timelock,
-          status: uint8(Status.Created)
+            payer: msg.sender,
+            payee: payee,
+            value: msg.value,
+            hashlock: hashlock,
+            timelock: timelock,
+            status: uint8(Status.Created)
         });
 
         nextEscrowId++;
         emit EscrowCreated(id, msg.sender, payee, msg.value, hashlock, timelock);
     }
-    
-    function release(uint256 id, bytes calldata preimage) external {}
-    function refund(uint256 id) external {}
-    function resolve(uint256 id, bool toPayee) external {}
-    function getEscrow(uint256 id) external view returns (EscrowDetails memory) {}
+
+    function release(uint256 id, bytes calldata preimage) external { }
+    function refund(uint256 id) external { }
+    function resolve(uint256 id, bool toPayee) external { }
+
+    function getEscrow(uint256 id) external view returns (EscrowDetails memory) {
+        return escrows[id];
+    }
 }
