@@ -1,6 +1,12 @@
 [profile.default]
-src = "src"
+src = "contracts"
 out = "out"
 libs = ["lib"]
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+single_line_statement_blocks = "preserve"
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
