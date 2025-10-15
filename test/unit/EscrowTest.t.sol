@@ -5,18 +5,34 @@ import { Test, console } from "forge-std/Test.sol";
 import { DeployEscrow } from "../../script/DeployEscrow.s.sol";
 import { Escrow } from "../../contracts/Escrow.sol";
 
-contract EscrowTest is Test {
-    Escrow public escrow;
+//==============================================================
+//           Base Contract for Shared State
+//==============================================================
+abstract contract EscrowTestBase is Test {
     address public arbiter;
     address public payer;
     address public payee;
     uint64 futureTimelock;
 
-    uint256 private constant STARTING_BALANCE = 10 ether;
-    uint256 private constant ESCROW_VALUE = 1 ether;
+    uint256 internal constant STARTING_BALANCE = 10 ether;
+    uint256 internal constant ESCROW_VALUE = 1 ether;
+    bytes32 internal constant HASH_LOCK = keccak256(bytes("mysecretpreimage"));
+    bytes internal constant PREIMAGE = "mysecretpreimage";
 
-    bytes32 private constant HASH_LOCK = keccak256("mysecretpreimage");
-    bytes private constant PREIMAGE = "mysecretpreimage";
+    function _baseSetUp() internal {
+        arbiter = makeAddr("arbiter");
+        payer = makeAddr("payer");
+        payee = makeAddr("payee");
+        futureTimelock = uint64(block.timestamp + 1 days);
+        vm.deal(payer, STARTING_BALANCE);
+    }
+}
+
+//==============================================================
+//           Function Integration Tests
+//==============================================================
+contract FunctionUnitTests is EscrowTestBase {
+    Escrow public escrow;
 
     modifier escrowCreated() {
         vm.prank(payer);
@@ -35,21 +51,14 @@ contract EscrowTest is Test {
     event Released(uint256 indexed id, bytes preimage);
 
     function setUp() external {
-        arbiter = makeAddr("arbiter");
-        payer = makeAddr("payer");
-        payee = makeAddr("payee");
-        futureTimelock = uint64(block.timestamp + 1 days);
-
+        _baseSetUp();
         DeployEscrow deployer = new DeployEscrow();
         escrow = deployer.run(arbiter);
-
-        vm.deal(payer, STARTING_BALANCE);
     }
 
     //==============================================================
     //           Tests for create Escrow Function
     //==============================================================
-
     function testFuzz_createEscrow_SuccessInvariants(
         address _payee,
         bytes32 _hashlock,
@@ -115,7 +124,6 @@ contract EscrowTest is Test {
     //==============================================================
     //           Tests for release Function
     //==============================================================
-
     function testFuzz_release_SuccessInvariants(
         address _payee,
         uint64 _timelock,
@@ -169,30 +177,47 @@ contract EscrowTest is Test {
 
         escrow.release(id, PREIMAGE);
     }
+}
 
-    //==============================================================
-    //           Tests for modifiers
-    //==============================================================
-    function test_modifier_escrowExists() public {
+contract ModifierUnitTests is EscrowTestBase {
+    TestableEscrow public escrow;
+
+    function setUp() external {
+        _baseSetUp();
+        escrow = new TestableEscrow(arbiter);
+    }
+
+    modifier escrowCreated() {
+        vm.prank(payer);
+        escrow.createEscrow{ value: ESCROW_VALUE }(payee, HASH_LOCK, futureTimelock);
+        _;
+    }
+
+    function test_modifier_escrowExists_RevertsIfIdDoesNotExist() public {
         uint256 nonExistentId = 999;
         vm.expectRevert(abi.encodeWithSelector(Escrow.Escrow__NotFound.selector, nonExistentId));
-        escrow.release(nonExistentId, PREIMAGE);
+        escrow.test_escrowExists_Modifier(nonExistentId);
     }
 
-    function test_modifier_inStatus() public escrowCreated {
-        uint256 escrowId = 0;
-        escrow.release(escrowId, PREIMAGE);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Escrow.Escrow__InvalidState.selector,
-                escrowId,
-                uint8(Escrow.Status.Released),
-                uint8(Escrow.Status.Created)
-            )
-        );
-        escrow.release(escrowId, PREIMAGE);
+    function test_modifier_inStatus_RevertsIfStatusIsWrong() public escrowCreated {
+    uint256 escrowId = 0; 
+    escrow.release(escrowId, PREIMAGE); 
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            Escrow.Escrow__InvalidState.selector,
+            escrowId, 
+            uint8(Escrow.Status.Released),
+            uint8(Escrow.Status.Created)  
+        )
+    );
+    escrow.test_inStatus_Modifier(escrowId, Escrow.Status.Created);
     }
+}
+
+contract TestableEscrow is Escrow {
+    constructor(address _arbiter) Escrow(_arbiter) {}
+    function test_escrowExists_Modifier(uint256 _id) external view escrowExists(_id) {}
+    function test_inStatus_Modifier(uint256 _id, Status _requiredStatus) external view inStatus(_id, _requiredStatus) {}
 }
 
 contract RevertingReceiver {
