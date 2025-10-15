@@ -14,7 +14,9 @@ contract Escrow is IEscrow {
     error Escrow__NotFound(uint256 id);
     error Escrow__InvalidState(uint256 id, uint8 currentStatus, uint8 requiredStatus);
     error Escrow__InvalidPreimage(uint256 id);
-    error Escrow__TransferFailed(uint256 id, address payee, uint256 value);
+    error Escrow__TransferFailed(uint256 id, address receiver, uint256 value);
+    error Escrow__NotThePayer(address caller, address expectedPayer);
+    error Escrow__TimelockNotExpired(uint256 blockTimestamp, uint64 escrowTimelock);
 
     modifier escrowExists(uint256 _id) {
         if (_escrows[_id].payer == address(0)) {
@@ -83,7 +85,25 @@ contract Escrow is IEscrow {
         }
     }
 
-    function refund(uint256 _id) external { }
+    function refund(uint256 _id) external escrowExists(_id) inStatus(_id, Status.Created) {
+        EscrowDetails storage escrow = _escrows[_id];
+
+        if (msg.sender != escrow.payer) {
+            revert Escrow__NotThePayer(msg.sender, escrow.payer);
+        }
+        if (block.timestamp < escrow.timelock) {
+            revert Escrow__TimelockNotExpired(block.timestamp, escrow.timelock);
+        }
+
+        escrow.status = uint8(Status.Refunded);
+        emit Refunded(_id);
+
+        (bool success, ) = escrow.payer.call{value: escrow.value}("");
+        if (!success) {
+            revert Escrow__TransferFailed(_id, escrow.payer, escrow.value);
+        }
+    }
+    
     function resolve(uint256 _id, bool _toPayee) external { }
 
     function getEscrow(uint256 id) external view returns (EscrowDetails memory) {
