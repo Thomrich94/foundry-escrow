@@ -98,12 +98,12 @@ contract Escrow is IEscrow {
         escrow.status = uint8(Status.Refunded);
         emit Refunded(_id);
 
-        (bool success, ) = escrow.payer.call{value: escrow.value}("");
+        (bool success,) = escrow.payer.call{ value: escrow.value }("");
         if (!success) {
             revert Escrow__TransferFailed(_id, escrow.payer, escrow.value);
         }
     }
-    
+
     function resolve(uint256 _id, bool _toPayee) external { }
 
     function getEscrow(uint256 id) external view returns (EscrowDetails memory) {

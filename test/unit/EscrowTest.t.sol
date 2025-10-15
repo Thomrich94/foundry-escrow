@@ -49,6 +49,7 @@ contract FunctionUnitTests is EscrowTestBase {
         uint64 timelock
     );
     event Released(uint256 indexed id, bytes preimage);
+    event Refunded(uint256 indexed id);
 
     function setUp() external {
         _baseSetUp();
@@ -177,6 +178,65 @@ contract FunctionUnitTests is EscrowTestBase {
 
         escrow.release(id, PREIMAGE);
     }
+
+    //==============================================================
+    //           Tests for refund Function
+    //==============================================================
+    function testFuzz_refund_SuccessInvariants(address _payee, uint64 _timelock, uint256 _value) public {
+        vm.assume(_value > 0 && _value < 1000 ether);
+        vm.assume(_timelock > block.timestamp && _timelock < block.timestamp + (10 * 365 days));
+        vm.assume(_payee != address(0) && _payee != payer);
+        vm.deal(payer, _value);
+
+        vm.prank(payer);
+        uint256 newId = escrow.createEscrow{ value: _value }(_payee, HASH_LOCK, _timelock);
+
+        vm.warp(_timelock + 1);
+        uint256 payerStartingBalance = payer.balance;
+        uint256 contractStartingBalance = address(escrow).balance;
+
+        vm.expectEmit(true, false, false, false, address(escrow));
+        emit Refunded(newId);
+
+        vm.prank(payer);
+        escrow.refund(newId);
+
+        Escrow.EscrowDetails memory details = escrow.getEscrow(newId);
+        assertEq(details.status, uint8(Escrow.Status.Refunded));
+        assertEq(payer.balance, payerStartingBalance + _value);
+        assertEq(address(escrow).balance, contractStartingBalance - _value);
+    }
+
+    function test_refund_RevertsIfNotCalledByPayer() public escrowCreated {
+        address attacker = makeAddr("attacker");
+
+        vm.prank(attacker);
+        vm.expectRevert(abi.encodeWithSelector(Escrow.Escrow__NotThePayer.selector, attacker, payer));
+        escrow.refund(0);
+    }
+
+    function test_refund_RevertsIfTimelockHasNotExpired() public escrowCreated {
+        vm.prank(payer);
+        vm.expectRevert(
+            abi.encodeWithSelector(Escrow.Escrow__TimelockNotExpired.selector, block.timestamp, futureTimelock)
+        );
+        escrow.refund(0);
+    }
+
+    function test_refund_RevertsIfTransferFails() public {
+        RevertingReceiver badPayer = new RevertingReceiver();
+        vm.deal(address(badPayer), ESCROW_VALUE);
+
+        vm.prank(address(badPayer));
+        uint256 id = escrow.createEscrow{ value: ESCROW_VALUE }(payee, HASH_LOCK, futureTimelock);
+
+        vm.warp(futureTimelock + 1);
+        vm.prank(address(badPayer));
+        vm.expectRevert(
+            abi.encodeWithSelector(Escrow.Escrow__TransferFailed.selector, id, address(badPayer), ESCROW_VALUE)
+        );
+        escrow.refund(id);
+    }
 }
 
 contract ModifierUnitTests is EscrowTestBase {
@@ -200,24 +260,24 @@ contract ModifierUnitTests is EscrowTestBase {
     }
 
     function test_modifier_inStatus_RevertsIfStatusIsWrong() public escrowCreated {
-    uint256 escrowId = 0; 
-    escrow.release(escrowId, PREIMAGE); 
-    vm.expectRevert(
-        abi.encodeWithSelector(
-            Escrow.Escrow__InvalidState.selector,
-            escrowId, 
-            uint8(Escrow.Status.Released),
-            uint8(Escrow.Status.Created)  
-        )
-    );
-    escrow.test_inStatus_Modifier(escrowId, Escrow.Status.Created);
+        uint256 escrowId = 0;
+        escrow.release(escrowId, PREIMAGE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Escrow.Escrow__InvalidState.selector,
+                escrowId,
+                uint8(Escrow.Status.Released),
+                uint8(Escrow.Status.Created)
+            )
+        );
+        escrow.test_inStatus_Modifier(escrowId, Escrow.Status.Created);
     }
 }
 
 contract TestableEscrow is Escrow {
-    constructor(address _arbiter) Escrow(_arbiter) {}
-    function test_escrowExists_Modifier(uint256 _id) external view escrowExists(_id) {}
-    function test_inStatus_Modifier(uint256 _id, Status _requiredStatus) external view inStatus(_id, _requiredStatus) {}
+    constructor(address _arbiter) Escrow(_arbiter) { }
+    function test_escrowExists_Modifier(uint256 _id) external view escrowExists(_id) { }
+    function test_inStatus_Modifier(uint256 _id, Status _requiredStatus) external view inStatus(_id, _requiredStatus) { }
 }
 
 contract RevertingReceiver {
