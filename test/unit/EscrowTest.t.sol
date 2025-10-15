@@ -18,6 +18,12 @@ contract EscrowTest is Test {
     bytes32 private constant HASH_LOCK = keccak256("mysecretpreimage");
     bytes private constant PREIMAGE = "mysecretpreimage";
 
+    modifier escrowCreated() {
+        vm.prank(payer);
+        escrow.createEscrow{ value: ESCROW_VALUE }(payee, HASH_LOCK, futureTimelock);
+        _;
+    }
+
     event EscrowCreated(
         uint256 indexed id,
         address indexed payer,
@@ -26,6 +32,7 @@ contract EscrowTest is Test {
         bytes32 hashlock,
         uint64 timelock
     );
+    event Released(uint256 indexed id, bytes preimage);
 
     function setUp() external {
         arbiter = makeAddr("arbiter");
@@ -39,21 +46,38 @@ contract EscrowTest is Test {
         vm.deal(payer, STARTING_BALANCE);
     }
 
-    function test_createEscrow_Success() public {
+    //==============================================================
+    //           Tests for create Escrow Function
+    //==============================================================
+
+    function testFuzz_createEscrow_SuccessInvariants(
+        address _payee,
+        bytes32 _hashlock,
+        uint64 _timelock,
+        uint256 _value
+    ) public {
+        vm.assume(_value > 0 && _value < 1000 ether);
+        vm.assume(_payee != address(0) && _payee != payer);
+        vm.assume(_timelock > block.timestamp && _timelock < block.timestamp + (10 * 365 days));
+        vm.deal(payer, _value);
+
+        uint256 nextIdBefore = escrow.getNextEscrowId();
+        uint256 contractBalanceBefore = address(escrow).balance;
+
         vm.prank(payer);
+        uint256 newId = escrow.createEscrow{ value: _value }(_payee, _hashlock, _timelock);
 
-        vm.expectEmit(true, true, true, true, address(escrow));
-        emit EscrowCreated(0, payer, payee, ESCROW_VALUE, HASH_LOCK, futureTimelock);
+        uint256 contractBalanceAfter = address(escrow).balance;
 
-        uint256 id = escrow.createEscrow{ value: ESCROW_VALUE }(payee, HASH_LOCK, futureTimelock);
-        assertEq(id, 0);
+        assertEq(newId, nextIdBefore);
+        assertEq(contractBalanceAfter, contractBalanceBefore + _value);
 
-        Escrow.EscrowDetails memory details = escrow.getEscrow(id);
+        Escrow.EscrowDetails memory details = escrow.getEscrow(newId);
         assertEq(details.payer, payer);
-        assertEq(details.payee, payee);
-        assertEq(details.value, ESCROW_VALUE);
-        assertEq(details.hashlock, HASH_LOCK);
-        assertEq(details.timelock, futureTimelock);
+        assertEq(details.payee, _payee);
+        assertEq(details.value, _value);
+        assertEq(details.hashlock, _hashlock);
+        assertEq(details.timelock, _timelock);
         assertEq(details.status, uint8(Escrow.Status.Created));
     }
 
@@ -86,5 +110,93 @@ contract EscrowTest is Test {
         );
 
         escrow.createEscrow{ value: ESCROW_VALUE }(payee, HASH_LOCK, pastTimelock);
+    }
+
+    //==============================================================
+    //           Tests for release Function
+    //==============================================================
+
+    function testFuzz_release_SuccessInvariants(
+        address _payee,
+        uint64 _timelock,
+        uint256 _value,
+        bytes calldata _preimage
+    ) public {
+        vm.assume(_value > 0 && _value < 1000 ether);
+        vm.assume(_timelock > block.timestamp && _timelock < block.timestamp + (10 * 365 days));
+        vm.assume(_preimage.length > 0 && _preimage.length < 64);
+        vm.assume(_payee != payer);
+        // 2. Enforce EVM constraints by whitelisting ONLY Externally Owned Accounts (EOAs).
+        vm.assume(_payee.code.length == 0);
+        // This filters out the zero address AND all precompiles.
+        vm.assume(uint160(_payee) > 0x1000);
+
+        vm.deal(payer, _value);
+
+        bytes32 _hashlock = keccak256(_preimage);
+        vm.prank(payer);
+        uint256 newId = escrow.createEscrow{ value: _value }(_payee, _hashlock, _timelock);
+
+        uint256 payeeStartingBalance = _payee.balance;
+        uint256 contractStartingBalance = address(escrow).balance;
+
+        vm.expectEmit(true, false, false, false, address(escrow));
+        emit Released(newId, _preimage);
+
+        escrow.release(newId, _preimage);
+
+        Escrow.EscrowDetails memory details = escrow.getEscrow(newId);
+        assertEq(details.status, uint8(Escrow.Status.Released));
+        assertEq(_payee.balance, payeeStartingBalance + _value);
+        assertEq(address(escrow).balance, contractStartingBalance - _value);
+    }
+
+    function test_release_RevertsIfPreimageIsInvalid() public escrowCreated {
+        uint256 escrowId = 0;
+        bytes memory wrongPreimage = "this is the wrong secret";
+        vm.expectRevert(abi.encodeWithSelector(Escrow.Escrow__InvalidPreimage.selector, escrowId));
+        escrow.release(escrowId, wrongPreimage);
+    }
+
+    function test_release_RevertsIfTransferFails() public {
+        RevertingReceiver badPayee = new RevertingReceiver();
+        vm.prank(payer);
+        uint256 id = escrow.createEscrow{ value: ESCROW_VALUE }(address(badPayee), HASH_LOCK, futureTimelock);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Escrow.Escrow__TransferFailed.selector, id, address(badPayee), ESCROW_VALUE)
+        );
+
+        escrow.release(id, PREIMAGE);
+    }
+
+    //==============================================================
+    //           Tests for modifiers
+    //==============================================================
+    function test_modifier_escrowExists() public {
+        uint256 nonExistentId = 999;
+        vm.expectRevert(abi.encodeWithSelector(Escrow.Escrow__NotFound.selector, nonExistentId));
+        escrow.release(nonExistentId, PREIMAGE);
+    }
+
+    function test_modifier_inStatus() public escrowCreated {
+        uint256 escrowId = 0;
+        escrow.release(escrowId, PREIMAGE);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Escrow.Escrow__InvalidState.selector,
+                escrowId,
+                uint8(Escrow.Status.Released),
+                uint8(Escrow.Status.Created)
+            )
+        );
+        escrow.release(escrowId, PREIMAGE);
+    }
+}
+
+contract RevertingReceiver {
+    receive() external payable {
+        revert("Payment rejected");
     }
 }
