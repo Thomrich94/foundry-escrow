@@ -10,9 +10,9 @@ interface IEscrow {
         bytes32 hashlock,
         uint64 timelock
     );
-    event Released(uint256 indexed id, bytes preimage);
-    event Refunded(uint256 indexed id);
-    event Resolved(uint256 indexed id, address winner);
+    event EscrowReleased(uint256 indexed id, bytes preimage);
+    event EscrowRefunded(uint256 indexed id);
+    event EscrowResolved(uint256 indexed id, address winner);
 
     struct EscrowDetails {
         address payer;
