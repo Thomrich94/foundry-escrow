@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.3;
 
-import { IEscrow } from "./interface/IEscrow.sol";
+import { IEscrow } from "./interfaces/IEscrow.sol";
 
 contract Escrow is IEscrow {
     address public immutable i_arbiter;
@@ -120,11 +120,11 @@ contract Escrow is IEscrow {
         escrow.status = uint8(Status.Resolved);
         emit EscrowResolved(id, winner);
 
-        (bool success, ) = winner.call{value: escrow.value}("");
+        (bool success,) = winner.call{ value: escrow.value }("");
         if (!success) {
             revert Escrow__TransferFailed(id, winner, escrow.value);
         }
-     }
+    }
 
     function getEscrow(uint256 id) external view returns (EscrowDetails memory) {
         return s_escrows[id];

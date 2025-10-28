@@ -5,8 +5,7 @@ import { Script, console } from "forge-std/Script.sol";
 import { Escrow } from "../contracts/Escrow.sol";
 
 contract DeployEscrow is Script {
-    function run() external returns (Escrow) {
-        address arbiter = vm.envAddress("ARBITER_ADDRESS");
+    function run(address arbiter) external returns (Escrow) {
         vm.startBroadcast();
         Escrow escrow = new Escrow(arbiter);
         vm.stopBroadcast();
