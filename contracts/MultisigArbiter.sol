@@ -60,4 +60,21 @@ contract MultisigArbiter is IMultisigArbiter {
         i_requiredConfirmations = requiredConfirmations;
         i_escrowContract = escrowContract;
     }
+
+    function proposeResolution(uint256 escrowId, bool toPayee) external override onlyArbiter {
+      Resolution storage resolution = s_resolutions[_escrowId][_toPayee];  
+      if (!resolution.exists) {
+        revert MultisigArbiter__ResolutionDoesNotExist(escrowId, toPayee);
+      }
+      if (resolution.hasConfirmed[msg.sender]) {
+        revert MultisigArbiter__AlreadyConfirmed(escrowId, toPayee, msg.sender);
+      }
+
+      resolution.hasConfirmed[msg.sender] = true;
+      resolution.confirmationCount++;
+
+      emit ResolutionConfirmed(escrowId, toPayee, msg.sender);
+    }
+
+    
 }

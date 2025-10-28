@@ -8,17 +8,6 @@ contract Escrow is IEscrow {
     uint256 private s_nextEscrowId;
     mapping(uint256 => EscrowDetails) private s_escrows;
 
-    error Escrow__ValueMustBePositive();
-    error Escrow__InvalidPayee();
-    error Escrow__TimelockNotInFuture(uint64 providedTimelock, uint64 currentTimestamp);
-    error Escrow__NotFound(uint256 id);
-    error Escrow__InvalidState(uint256 id, uint8 currentStatus, uint8 requiredStatus);
-    error Escrow__InvalidPreimage(uint256 id);
-    error Escrow__TransferFailed(uint256 id, address receiver, uint256 value);
-    error Escrow__NotThePayer(address caller, address expectedPayer);
-    error Escrow__TimelockNotExpired(uint256 blockTimestamp, uint64 escrowTimelock);
-    error Escrow__NotArbiter(address caller, address arbiter);
-
     modifier escrowExists(uint256 id) {
         if (s_escrows[id].payer == address(0)) {
             revert Escrow__NotFound(id);
