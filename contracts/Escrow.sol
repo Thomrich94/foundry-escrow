@@ -41,7 +41,12 @@ contract Escrow is IEscrow {
         i_arbiter = arbiter;
     }
 
-    function createEscrow(address payee, bytes32 hashlock, uint64 timelock) external payable returns (uint256 id) {
+    function createEscrow(address payee, bytes32 hashlock, uint64 timelock)
+        external
+        payable
+        override
+        returns (uint256 id)
+    {
         if (msg.value == 0) {
             revert Escrow__ValueMustBePositive();
         }
@@ -66,7 +71,12 @@ contract Escrow is IEscrow {
         emit EscrowCreated(id, msg.sender, payee, msg.value, hashlock, timelock);
     }
 
-    function release(uint256 id, bytes calldata preimage) external escrowExists(id) inStatus(id, Status.Created) {
+    function release(uint256 id, bytes calldata preimage)
+        external
+        override
+        escrowExists(id)
+        inStatus(id, Status.Created)
+    {
         EscrowDetails storage escrow = s_escrows[id];
 
         if (keccak256(preimage) != escrow.hashlock) {
@@ -82,7 +92,7 @@ contract Escrow is IEscrow {
         }
     }
 
-    function refund(uint256 id) external escrowExists(id) inStatus(id, Status.Created) {
+    function refund(uint256 id) external override escrowExists(id) inStatus(id, Status.Created) {
         EscrowDetails storage escrow = s_escrows[id];
 
         if (msg.sender != escrow.payer) {
@@ -101,7 +111,13 @@ contract Escrow is IEscrow {
         }
     }
 
-    function resolve(uint256 id, bool toPayee) external onlyArbiter escrowExists(id) inStatus(id, Status.Created) {
+    function resolve(uint256 id, bool toPayee)
+        external
+        override
+        onlyArbiter
+        escrowExists(id)
+        inStatus(id, Status.Created)
+    {
         EscrowDetails storage escrow = s_escrows[id];
 
         address winner = toPayee ? escrow.payee : escrow.payer;

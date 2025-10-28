@@ -2,6 +2,7 @@
 pragma solidity ^0.8.3;
 
 import { IMultisigArbiter } from "./interfaces/IMultisigArbiter.sol";
+import { IEscrow } from "./interfaces/IEscrow.sol";
 
 contract MultisigArbiter is IMultisigArbiter {
     address public immutable i_escrowContract;
@@ -17,18 +18,6 @@ contract MultisigArbiter is IMultisigArbiter {
     }
 
     mapping(uint256 => mapping(bool => Resolution)) private s_resolutions;
-
-    error MultisigArbiter__NotAnArbiter(address caller);
-    error MultisigArbiter__AlreadyConfirmed(uint256 escrowId, bool toPayee, address confirmer);
-    error MultisigArbiter__ResolutionAlreadyExecuted(uint256 escrowId, bool toPayee);
-    error MultisigArbiter__ResolutionDoesNotExist(uint256 escrowId, bool toPayee);
-    error MultisigArbiter__NotEnoughConfirmations(
-        uint256 escrowId, bool toPayee, uint256 confirmations, uint256 required
-    );
-    error MultisigArbiter__InvalidArbiterList();
-    error MultisigArbiter__InvalidRequiredConfirmations(uint256 required, uint256 arbiters);
-    error MultisigArbiter__InvalidArbiterAddress();
-    error MultisigArbiter__DuplicateArbiter(address duplicateAddress);
 
     modifier onlyArbiter() {
         if (!s_isArbiter[msg.sender]) {
@@ -62,19 +51,56 @@ contract MultisigArbiter is IMultisigArbiter {
     }
 
     function proposeResolution(uint256 escrowId, bool toPayee) external override onlyArbiter {
-      Resolution storage resolution = s_resolutions[_escrowId][_toPayee];  
-      if (!resolution.exists) {
-        revert MultisigArbiter__ResolutionDoesNotExist(escrowId, toPayee);
-      }
-      if (resolution.hasConfirmed[msg.sender]) {
-        revert MultisigArbiter__AlreadyConfirmed(escrowId, toPayee, msg.sender);
-      }
+        Resolution storage resolution = s_resolutions[escrowId][toPayee];
+        if (resolution.exists) {
+            revert MultisigArbiter__ResolutionAlreadyProposed(escrowId, toPayee);
+        }
 
-      resolution.hasConfirmed[msg.sender] = true;
-      resolution.confirmationCount++;
+        resolution.exists = true;
+        resolution.hasConfirmed[msg.sender] = true;
+        resolution.confirmationCount = 1;
 
-      emit ResolutionConfirmed(escrowId, toPayee, msg.sender);
+        emit ResolutionProposed(escrowId, toPayee, msg.sender);
+        emit ResolutionConfirmed(escrowId, toPayee, msg.sender);
     }
 
-    
+    function confirmResolution(uint256 escrowId, bool toPayee) external override onlyArbiter {
+        Resolution storage resolution = s_resolutions[escrowId][toPayee];
+        if (!resolution.exists) {
+            revert MultisigArbiter__ResolutionDoesNotExist(escrowId, toPayee);
+        }
+        if (resolution.hasConfirmed[msg.sender]) {
+            revert MultisigArbiter__AlreadyConfirmed(escrowId, toPayee, msg.sender);
+        }
+
+        resolution.hasConfirmed[msg.sender] = true;
+        resolution.confirmationCount++;
+
+        emit ResolutionConfirmed(escrowId, toPayee, msg.sender);
+    }
+
+    function executeResolution(uint256 escrowId, bool toPayee) external override onlyArbiter {
+        Resolution storage resolution = s_resolutions[escrowId][toPayee];
+        if (!resolution.exists) {
+            revert MultisigArbiter__ResolutionDoesNotExist(escrowId, toPayee);
+        }
+        if (resolution.executed) {
+            revert MultisigArbiter__ResolutionAlreadyExecuted(escrowId, toPayee);
+        }
+        if (resolution.confirmationCount < i_requiredConfirmations) {
+            revert MultisigArbiter__NotEnoughConfirmations(
+                escrowId, toPayee, resolution.confirmationCount, i_requiredConfirmations
+            );
+        }
+
+        resolution.executed = true;
+
+        try IEscrow(i_escrowContract).resolve(escrowId, toPayee) {
+            emit ResolutionExecuted(escrowId, toPayee);
+        } catch {
+            revert MultisigArbiter__EscrowCallFailed(escrowId, toPayee);
+        }
+
+        emit ResolutionExecuted(escrowId, toPayee);
+    }
 }

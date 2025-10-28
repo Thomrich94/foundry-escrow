@@ -4,6 +4,7 @@ pragma solidity ^0.8.3;
 import { Test } from "forge-std/Test.sol";
 import { DeployEscrow } from "../../script/DeployEscrow.s.sol";
 import { Escrow } from "../../contracts/Escrow.sol";
+import { IEscrow } from "../../contracts/interfaces/IEscrow.sol";
 
 //==============================================================
 //           Base Contract for Shared State
@@ -94,7 +95,7 @@ contract FunctionUnitTests is EscrowTestBase {
     function test_createEscrow_RevertsIfValueIsZero() public {
         vm.prank(payer);
 
-        vm.expectRevert(Escrow.Escrow__ValueMustBePositive.selector);
+        vm.expectRevert(IEscrow.Escrow__ValueMustBePositive.selector);
 
         escrow.createEscrow{ value: 0 }(payee, HASH_LOCK, futureTimelock);
     }
@@ -102,7 +103,7 @@ contract FunctionUnitTests is EscrowTestBase {
     function test_createEscrow_RevertsIfPayeeIsZeroAddress() public {
         vm.prank(payer);
 
-        vm.expectRevert(Escrow.Escrow__InvalidPayee.selector);
+        vm.expectRevert(IEscrow.Escrow__InvalidPayee.selector);
 
         escrow.createEscrow{ value: ESCROW_VALUE }(address(0), HASH_LOCK, futureTimelock);
     }
@@ -116,7 +117,7 @@ contract FunctionUnitTests is EscrowTestBase {
         vm.prank(payer);
 
         vm.expectRevert(
-            abi.encodeWithSelector(Escrow.Escrow__TimelockNotInFuture.selector, pastTimelock, futureTimestamp)
+            abi.encodeWithSelector(IEscrow.Escrow__TimelockNotInFuture.selector, pastTimelock, futureTimestamp)
         );
 
         escrow.createEscrow{ value: ESCROW_VALUE }(payee, HASH_LOCK, pastTimelock);
@@ -163,7 +164,7 @@ contract FunctionUnitTests is EscrowTestBase {
     function test_release_RevertsIfPreimageIsInvalid() public escrowCreated {
         uint256 escrowId = 0;
         bytes memory wrongPreimage = "this is the wrong secret";
-        vm.expectRevert(abi.encodeWithSelector(Escrow.Escrow__InvalidPreimage.selector, escrowId));
+        vm.expectRevert(abi.encodeWithSelector(IEscrow.Escrow__InvalidPreimage.selector, escrowId));
         escrow.release(escrowId, wrongPreimage);
     }
 
@@ -173,7 +174,7 @@ contract FunctionUnitTests is EscrowTestBase {
         uint256 id = escrow.createEscrow{ value: ESCROW_VALUE }(address(badPayee), HASH_LOCK, futureTimelock);
 
         vm.expectRevert(
-            abi.encodeWithSelector(Escrow.Escrow__TransferFailed.selector, id, address(badPayee), ESCROW_VALUE)
+            abi.encodeWithSelector(IEscrow.Escrow__TransferFailed.selector, id, address(badPayee), ESCROW_VALUE)
         );
 
         escrow.release(id, PREIMAGE);
@@ -211,14 +212,14 @@ contract FunctionUnitTests is EscrowTestBase {
         address attacker = makeAddr("attacker");
 
         vm.prank(attacker);
-        vm.expectRevert(abi.encodeWithSelector(Escrow.Escrow__NotThePayer.selector, attacker, payer));
+        vm.expectRevert(abi.encodeWithSelector(IEscrow.Escrow__NotThePayer.selector, attacker, payer));
         escrow.refund(0);
     }
 
     function test_refund_RevertsIfTimelockHasNotExpired() public escrowCreated {
         vm.prank(payer);
         vm.expectRevert(
-            abi.encodeWithSelector(Escrow.Escrow__TimelockNotExpired.selector, block.timestamp, futureTimelock)
+            abi.encodeWithSelector(IEscrow.Escrow__TimelockNotExpired.selector, block.timestamp, futureTimelock)
         );
         escrow.refund(0);
     }
@@ -233,7 +234,7 @@ contract FunctionUnitTests is EscrowTestBase {
         vm.warp(futureTimelock + 1);
         vm.prank(address(badPayer));
         vm.expectRevert(
-            abi.encodeWithSelector(Escrow.Escrow__TransferFailed.selector, id, address(badPayer), ESCROW_VALUE)
+            abi.encodeWithSelector(IEscrow.Escrow__TransferFailed.selector, id, address(badPayer), ESCROW_VALUE)
         );
         escrow.refund(id);
     }
@@ -255,7 +256,7 @@ contract ModifierUnitTests is EscrowTestBase {
 
     function test_modifier_escrowExists_RevertsIfIdDoesNotExist() public {
         uint256 nonExistentId = 999;
-        vm.expectRevert(abi.encodeWithSelector(Escrow.Escrow__NotFound.selector, nonExistentId));
+        vm.expectRevert(abi.encodeWithSelector(IEscrow.Escrow__NotFound.selector, nonExistentId));
         escrow.test_escrowExists_Modifier(nonExistentId);
     }
 
@@ -264,7 +265,7 @@ contract ModifierUnitTests is EscrowTestBase {
         escrow.release(escrowId, PREIMAGE);
         vm.expectRevert(
             abi.encodeWithSelector(
-                Escrow.Escrow__InvalidState.selector,
+                IEscrow.Escrow__InvalidState.selector,
                 escrowId,
                 uint8(Escrow.Status.Released),
                 uint8(Escrow.Status.Created)
