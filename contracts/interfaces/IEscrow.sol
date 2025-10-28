@@ -2,6 +2,17 @@
 pragma solidity ^0.8.3;
 
 interface IEscrow {
+    error Escrow__ValueMustBePositive();
+    error Escrow__InvalidPayee();
+    error Escrow__TimelockNotInFuture(uint64 providedTimelock, uint64 currentTimestamp);
+    error Escrow__NotFound(uint256 id);
+    error Escrow__InvalidState(uint256 id, uint8 currentStatus, uint8 requiredStatus);
+    error Escrow__InvalidPreimage(uint256 id);
+    error Escrow__TransferFailed(uint256 id, address receiver, uint256 value);
+    error Escrow__NotThePayer(address caller, address expectedPayer);
+    error Escrow__TimelockNotExpired(uint256 blockTimestamp, uint64 escrowTimelock);
+    error Escrow__NotArbiter(address caller, address arbiter);
+
     event EscrowCreated(
         uint256 indexed id,
         address indexed payer,
