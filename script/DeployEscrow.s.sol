@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.3;
 
-import { Script } from "forge-std/Script.sol";
+import { Script, console } from "forge-std/Script.sol";
 import { Escrow } from "../contracts/Escrow.sol";
 
 contract DeployEscrow is Script {
-    function run(address _arbiter) external returns (Escrow) {
+    function run() external returns (Escrow) {
+        address arbiter = vm.envAddress("ARBITER_ADDRESS");
         vm.startBroadcast();
-        Escrow escrow = new Escrow(_arbiter);
+        Escrow escrow = new Escrow(arbiter);
         vm.stopBroadcast();
+
+        console.log("Escrow deployed at:", address(escrow));
+        console.log("Arbiter:", arbiter);
 
         return escrow;
     }
