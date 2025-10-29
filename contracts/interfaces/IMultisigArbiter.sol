@@ -15,6 +15,9 @@ interface IMultisigArbiter {
     error MultisigArbiter__DuplicateArbiter(address duplicateAddress);
     error MultisigArbiter__ResolutionAlreadyProposed(uint256 escrowId, bool toPayee);
     error MultisigArbiter__EscrowCallFailed(uint256 escrowId, bool toPayee);
+    error MultisigArbiter__NotOwner(address caller);
+    error MultisigArbiter__EscrowContractAlreadySet(address currentAddress);
+    error MultisigArbiter__InvalidOwnerAddress(address owner);
 
     event ResolutionProposed(uint256 indexed escrowId, bool toPayee, address indexed proposer);
     event ResolutionConfirmed(uint256 indexed escrowId, bool toPayee, address indexed confirmer);

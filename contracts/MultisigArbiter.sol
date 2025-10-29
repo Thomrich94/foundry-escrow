@@ -5,9 +5,10 @@ import { IMultisigArbiter } from "./interfaces/IMultisigArbiter.sol";
 import { IEscrow } from "./interfaces/IEscrow.sol";
 
 contract MultisigArbiter is IMultisigArbiter {
-    address public immutable i_escrowContract;
     uint256 public immutable i_requiredConfirmations;
+    address public immutable i_owner;
     address[] public s_arbiters;
+    address public s_escrowContract;
     mapping(address => bool) private s_isArbiter;
 
     struct Resolution {
@@ -26,13 +27,25 @@ contract MultisigArbiter is IMultisigArbiter {
         _;
     }
 
-    constructor(address[] memory arbiters, uint256 requiredConfirmations, address escrowContract) {
+    modifier onlyOwner() {
+        if (msg.sender != i_owner) {
+            revert MultisigArbiter__NotOwner(msg.sender);
+        }
+        _;
+    }
+
+    constructor(address owner, address[] memory arbiters, uint256 requiredConfirmations) {
         if (arbiters.length == 0) {
             revert MultisigArbiter__InvalidArbiterList();
         }
         if (requiredConfirmations == 0 || requiredConfirmations > arbiters.length) {
             revert MultisigArbiter__InvalidRequiredConfirmations(requiredConfirmations, arbiters.length);
         }
+        if (owner == address(0)) {
+            revert MultisigArbiter__InvalidOwnerAddress(owner);
+        }
+
+        i_owner = owner;
 
         for (uint256 i = 0; i < arbiters.length; i++) {
             address arbiter = arbiters[i];
@@ -47,7 +60,6 @@ contract MultisigArbiter is IMultisigArbiter {
             s_arbiters.push(arbiter);
         }
         i_requiredConfirmations = requiredConfirmations;
-        i_escrowContract = escrowContract;
     }
 
     function proposeResolution(uint256 escrowId, bool toPayee) external override onlyArbiter {
@@ -95,7 +107,7 @@ contract MultisigArbiter is IMultisigArbiter {
 
         resolution.executed = true;
 
-        try IEscrow(i_escrowContract).resolve(escrowId, toPayee) {
+        try IEscrow(s_escrowContract).resolve(escrowId, toPayee) {
             emit ResolutionExecuted(escrowId, toPayee);
         } catch {
             revert MultisigArbiter__EscrowCallFailed(escrowId, toPayee);
@@ -107,6 +119,12 @@ contract MultisigArbiter is IMultisigArbiter {
     function isResolutionApproved(uint256 escrowId, bool toPayee) external view override returns (bool) {
         Resolution storage resolution = s_resolutions[escrowId][toPayee];
         return resolution.exists && !resolution.executed && resolution.confirmationCount >= i_requiredConfirmations;
+    }
+
+    function setEscrowContract(address escrowContract) external {
+        require(msg.sender == i_owner, "Only owner can set the escrow contract");
+        require(s_escrowContract == address(0), "Escrow contract already set");
+        s_escrowContract = escrowContract;
     }
 
     function getArbiters() external view returns (address[] memory) {
