@@ -2,9 +2,10 @@
 pragma solidity ^0.8.3;
 
 import { IEscrow } from "./interfaces/IEscrow.sol";
+import { IMultisigArbiter } from "./interfaces/IMultisigArbiter.sol";
 
 contract Escrow is IEscrow {
-    address public immutable i_arbiter;
+    address public immutable i_multisigArbiter;
     uint256 private s_nextEscrowId;
     mapping(uint256 => EscrowDetails) private s_escrows;
 
@@ -24,8 +25,8 @@ contract Escrow is IEscrow {
     }
 
     modifier onlyArbiter() {
-        if (msg.sender != i_arbiter) {
-            revert Escrow__NotArbiter(msg.sender, i_arbiter);
+        if (msg.sender != i_multisigArbiter) {
+            revert Escrow__NotArbiter(msg.sender, i_multisigArbiter);
         }
         _;
     }
@@ -37,8 +38,8 @@ contract Escrow is IEscrow {
         Resolved
     }
 
-    constructor(address arbiter) {
-        i_arbiter = arbiter;
+    constructor(address multisigArbiter) {
+        i_multisigArbiter = multisigArbiter;
     }
 
     function createEscrow(address payee, bytes32 hashlock, uint64 timelock)
@@ -118,8 +119,11 @@ contract Escrow is IEscrow {
         escrowExists(id)
         inStatus(id, Status.Created)
     {
-        EscrowDetails storage escrow = s_escrows[id];
+        if (!IMultisigArbiter(i_multisigArbiter).isResolutionApproved(id, toPayee)) {
+            revert Escrow__ResolutionNotApproved(id);
+        }
 
+        EscrowDetails storage escrow = s_escrows[id];
         address winner = toPayee ? escrow.payee : escrow.payer;
 
         escrow.status = uint8(Status.Resolved);

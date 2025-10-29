@@ -113,7 +113,11 @@ contract MultisigArbiter is IMultisigArbiter {
         return s_arbiters;
     }
 
-    function getResolution(uint256 escrowId, bool toPayee) external view returns (bool exists, bool executed, uint256 confirmationCount) {
+    function getResolution(uint256 escrowId, bool toPayee)
+        external
+        view
+        returns (bool exists, bool executed, uint256 confirmationCount)
+    {
         Resolution storage resolution = s_resolutions[escrowId][toPayee];
         return (resolution.exists, resolution.executed, resolution.confirmationCount);
     }

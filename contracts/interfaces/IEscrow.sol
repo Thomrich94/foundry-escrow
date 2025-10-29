@@ -12,6 +12,7 @@ interface IEscrow {
     error Escrow__NotThePayer(address caller, address expectedPayer);
     error Escrow__TimelockNotExpired(uint256 blockTimestamp, uint64 escrowTimelock);
     error Escrow__NotArbiter(address caller, address arbiter);
+    error Escrow__ResolutionNotApproved(uint256 id);
 
     event EscrowCreated(
         uint256 indexed id,
